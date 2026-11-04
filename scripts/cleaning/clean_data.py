@@ -72,41 +72,61 @@ meta["studio_primary"] = meta["studio_primary"].apply(lambda x: x[0] if x else "
 STUDIO_MAP = {
     # Disney family
     "Walt Disney Pictures": "Disney",
+    "Walt Disney Productions": "Disney",
     "Pixar Animation Studios": "Disney",
     "Marvel Studios": "Disney",
     "Lucasfilm": "Disney",
     "Touchstone Pictures": "Disney",
     "Hollywood Pictures": "Disney",
+    "Miramax Films": "Disney",           # Disney-owned 1993–2010
+    "Miramax": "Disney",
+    "Buena Vista Pictures": "Disney",
     # Universal family
     "Universal Pictures": "Universal",
+    "Universal Studios": "Universal",
     "Illumination Entertainment": "Universal",
     "DreamWorks Animation": "Universal",
     "Amblin Entertainment": "Universal",
+    "Working Title Films": "Universal",
     # Warner Bros. family
     "Warner Bros.": "Warner Bros.",
     "New Line Cinema": "Warner Bros.",
     "Castle Rock Entertainment": "Warner Bros.",
+    "Fine Line Features": "Warner Bros.",
+    "Village Roadshow Pictures": "Warner Bros.",
+    "DC Comics": "Warner Bros.",
     # Sony / Columbia
     "Columbia Pictures": "Sony",
+    "Columbia Pictures Corporation": "Sony",
     "Sony Pictures": "Sony",
+    "Sony Pictures Classics": "Sony",
     "TriStar Pictures": "Sony",
     "Screen Gems": "Sony",
     # Paramount
     "Paramount Pictures": "Paramount",
     "DreamWorks Pictures": "Paramount",
+    "DreamWorks SKG": "Paramount",
     "Skydance Media": "Paramount",
-    # 20th Century Fox
+    "Spyglass Entertainment": "Paramount",
+    # Fox
     "20th Century Fox": "Fox",
+    "Twentieth Century Fox Film Corporation": "Fox",
     "Fox Searchlight Pictures": "Fox",
     "Fox 2000 Pictures": "Fox",
+    "Regency Enterprises": "Fox",         # long-term Fox co-production partner
     # Lionsgate
     "Lionsgate": "Lionsgate",
+    "Lions Gate Films": "Lionsgate",
     "Summit Entertainment": "Lionsgate",
-    # A24
-    "A24": "A24",
+    "Dimension Films": "Lionsgate",       # Weinstein/Dimension folded into Lionsgate era
     # MGM
     "Metro-Goldwyn-Mayer (MGM)": "MGM",
+    "Metro-Goldwyn-Mayer": "MGM",
     "United Artists": "MGM",
+    "Orion Pictures": "MGM",
+    "Eon Productions": "MGM",             # James Bond — distributed by MGM/UA
+    # A24
+    "A24": "A24",
 }
 
 meta["studio_group"] = meta["studio_primary"].map(STUDIO_MAP).fillna("Independent")
