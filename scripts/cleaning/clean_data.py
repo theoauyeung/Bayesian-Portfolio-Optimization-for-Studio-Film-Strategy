@@ -16,7 +16,7 @@ meta = meta[meta["status"] == "Released"].copy()
 meta = meta[meta["original_language"] == "en"].copy()       # English-language only
 meta["release_date"] = pd.to_datetime(meta["release_date"], errors="coerce")
 meta = meta[meta["release_date"].notna()].copy()
-meta = meta[meta["release_date"].dt.year >= 1980].copy()    # modern era only
+meta = meta[meta["release_date"].dt.year >= 1990].copy()    # post-1980s structural break
 meta = meta[meta["runtime"] >= 60].copy()                   # feature films only
 meta = meta[meta["vote_count"] >= 50].copy()                # enough ratings for quality signal
 print(f"  after basic filters: {meta.shape}")
