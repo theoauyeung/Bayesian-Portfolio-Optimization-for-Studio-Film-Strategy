@@ -127,6 +127,12 @@ STUDIO_MAP = {
     "Eon Productions": "MGM",             # James Bond — distributed by MGM/UA
     # A24
     "A24": "A24",
+    # Additional production companies with clear major-studio alignment
+    "Legendary Pictures": "Warner Bros.",
+    "Silver Pictures": "Warner Bros.",
+    "WingNut Films": "Warner Bros.",
+    "Blue Sky Studios": "Fox",
+    "Jerry Bruckheimer Films": "Disney",
 }
 
 meta["studio_group"] = meta["studio_primary"].map(STUDIO_MAP).fillna("Independent")
