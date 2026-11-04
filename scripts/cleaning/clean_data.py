@@ -220,7 +220,7 @@ KEEP = [
     "id", "imdb_id", "title", "year", "decade", "month", "season",
     "budget_adj", "revenue_adj", "roi",
     "budget_tier", "genre_primary", "genres_list",
-    "ip_type", "studio_primary", "studio_label", "studio_group",
+    "ip_type", "studio_label", "studio_group",
     "runtime", "vote_average", "vote_count",
     "original_language", "popularity",
 ]
