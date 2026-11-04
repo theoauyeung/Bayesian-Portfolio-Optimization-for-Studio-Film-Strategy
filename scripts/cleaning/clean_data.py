@@ -25,6 +25,9 @@ print(f"  after basic filters: {meta.shape}")
 meta["budget"]  = pd.to_numeric(meta["budget"],  errors="coerce")
 meta["revenue"] = pd.to_numeric(meta["revenue"], errors="coerce")
 meta = meta[(meta["budget"] > 0) & (meta["revenue"] > 0)].copy()
+# Drop rows where budget is suspiciously small — TMDB data entry errors
+# (e.g. budget stored in thousands, or wrong currency). $50k floor post-CPI.
+meta = meta[meta["budget"] >= 50_000].copy()
 
 # Inflation-adjust to 2017 USD using a simple CPI approximation
 # CPI index anchored to 2017; multipliers per decade are rough but standard
@@ -59,83 +62,180 @@ def parse_json_names(val, n=1):
     except Exception:
         return []
 
-meta["genres_list"]    = meta["genres"].apply(lambda x: parse_json_names(x, n=0))
-meta["genre_primary"]  = meta["genres"].apply(lambda x: parse_json_names(x, n=1))
-meta["genre_primary"]  = meta["genre_primary"].apply(lambda x: x[0] if x else "Unknown")
+meta["genres_list"] = meta["genres"].apply(lambda x: parse_json_names(x, n=0))
 
-meta["studios_list"]   = meta["production_companies"].apply(lambda x: parse_json_names(x, n=0))
-meta["studio_primary"] = meta["production_companies"].apply(lambda x: parse_json_names(x, n=1))
-meta["studio_primary"] = meta["studio_primary"].apply(lambda x: x[0] if x else "Unknown")
+# Priority-based genre assignment: more specific genres take precedence over
+# generic ones (Drama, Action) even when listed later in TMDB's genre array.
+# E.g. Saving Private Ryan = ["Drama","History","War"] → assigned "War".
+GENRE_PRIORITY = [
+    "Animation", "Documentary", "Horror", "Western", "War",
+    "Music", "Science Fiction", "Fantasy", "Adventure", "Action",
+    "Thriller", "Crime", "Mystery", "Comedy", "Romance",
+    "Family", "History", "Drama",
+]
+
+def assign_genre_primary(genres_str):
+    names = set(parse_json_names(genres_str, n=0))
+    for g in GENRE_PRIORITY:
+        if g in names:
+            return g
+    lst = parse_json_names(genres_str, n=1)
+    return lst[0] if lst else "Unknown"
+
+meta["genre_primary"] = meta["genres"].apply(assign_genre_primary)
+
+meta["studios_list"] = meta["production_companies"].apply(lambda x: parse_json_names(x, n=0))
 
 # ── 5. Studio tier mapping ────────────────────────────────────────────────────
-# Map to major studio groups; everything else = Independent
+# Map production/distribution companies to studio groups.
+# DreamWorks is its own group (live-action + animation consolidated).
+# The Weinstein Company is its own group.
+# Everything else unmapped = Independent.
 STUDIO_MAP = {
     # Disney family
     "Walt Disney Pictures": "Disney",
     "Walt Disney Productions": "Disney",
+    "Walt Disney": "Disney",
+    "Walt Disney Animation Studios": "Disney",
+    "Walt Disney Studios Motion Pictures": "Disney",
+    "Walt Disney Television Animation": "Disney",
     "Pixar Animation Studios": "Disney",
     "Marvel Studios": "Disney",
+    "Marvel Entertainment": "Disney",
     "Lucasfilm": "Disney",
     "Touchstone Pictures": "Disney",
     "Hollywood Pictures": "Disney",
-    "Miramax Films": "Disney",           # Disney-owned 1993–2010
+    "Miramax Films": "Disney",
     "Miramax": "Disney",
     "Buena Vista Pictures": "Disney",
+    "Jerry Bruckheimer Films": "Disney",
     # Universal family
     "Universal Pictures": "Universal",
     "Universal Studios": "Universal",
+    "Universal": "Universal",
     "Illumination Entertainment": "Universal",
-    "DreamWorks Animation": "Universal",
     "Amblin Entertainment": "Universal",
     "Working Title Films": "Universal",
+    "Imagine Entertainment": "Universal",      # Ron Howard / Brian Grazer — primarily Universal
+    "Focus Features": "Universal",             # Universal specialty label
     # Warner Bros. family
     "Warner Bros.": "Warner Bros.",
+    "Warner Bros. Family Entertainment": "Warner Bros.",
+    "Warner Bros. Animation": "Warner Bros.",
+    "Warner Bros. Pictures": "Warner Bros.",
     "New Line Cinema": "Warner Bros.",
+    "New Line Productions": "Warner Bros.",
     "Castle Rock Entertainment": "Warner Bros.",
     "Fine Line Features": "Warner Bros.",
     "Village Roadshow Pictures": "Warner Bros.",
     "DC Comics": "Warner Bros.",
+    "DC Entertainment": "Warner Bros.",
+    "Heyday Films": "Warner Bros.",
+    "Heyday films": "Warner Bros.",
+    "Legendary Pictures": "Warner Bros.",
+    "Silver Pictures": "Warner Bros.",
+    "WingNut Films": "Warner Bros.",
     # Sony / Columbia
     "Columbia Pictures": "Sony",
     "Columbia Pictures Corporation": "Sony",
+    "Columbia TriStar": "Sony",
     "Sony Pictures": "Sony",
+    "Sony Pictures Entertainment": "Sony",
+    "Sony Pictures Animation": "Sony",
     "Sony Pictures Classics": "Sony",
     "TriStar Pictures": "Sony",
     "Screen Gems": "Sony",
+    "Screen Gems, Inc.": "Sony",
     # Paramount
     "Paramount Pictures": "Paramount",
-    "DreamWorks Pictures": "Paramount",
-    "DreamWorks SKG": "Paramount",
+    "Paramount Vantage": "Paramount",          # Paramount specialty label
+    "Paramount Classics": "Paramount",
     "Skydance Media": "Paramount",
     "Spyglass Entertainment": "Paramount",
+    "Nickelodeon Movies": "Paramount",
+    "CBS Films": "Paramount",
     # Fox
     "20th Century Fox": "Fox",
     "Twentieth Century Fox Film Corporation": "Fox",
+    "Twentieth Century-Fox": "Fox",
     "Fox Searchlight Pictures": "Fox",
     "Fox 2000 Pictures": "Fox",
-    "Regency Enterprises": "Fox",         # long-term Fox co-production partner
+    "Fox Atomic": "Fox",
+    "Fox International Productions": "Fox",
+    "New Regency Pictures": "Fox",
+    "Regency Enterprises": "Fox",
+    "Blue Sky Studios": "Fox",
+    "Chernin Entertainment": "Fox",
     # Lionsgate
     "Lionsgate": "Lionsgate",
     "Lions Gate Films": "Lionsgate",
+    "Lions Gate": "Lionsgate",
+    "Lions Gate Family Entertainment": "Lionsgate",
     "Summit Entertainment": "Lionsgate",
-    "Dimension Films": "Lionsgate",       # Weinstein/Dimension folded into Lionsgate era
+    "Dimension Films": "Lionsgate",
     # MGM
     "Metro-Goldwyn-Mayer (MGM)": "MGM",
     "Metro-Goldwyn-Mayer": "MGM",
     "United Artists": "MGM",
     "Orion Pictures": "MGM",
-    "Eon Productions": "MGM",             # James Bond — distributed by MGM/UA
+    "Orion Pictures Corporation": "MGM",
+    "Eon Productions": "MGM",
+    # DreamWorks — own group (live-action + animation consolidated)
+    "DreamWorks Pictures": "DreamWorks",
+    "DreamWorks SKG": "DreamWorks",
+    "DreamWorks": "DreamWorks",
+    "DreamWorks Animation": "DreamWorks",
+    "Pacific Data Images (PDI)": "DreamWorks",
+    # Weinstein — own group
+    "The Weinstein Company": "Weinstein",
+    "Weinstein Company, The": "Weinstein",
     # A24
     "A24": "A24",
-    # Additional production companies with clear major-studio alignment
-    "Legendary Pictures": "Warner Bros.",
-    "Silver Pictures": "Warner Bros.",
-    "WingNut Films": "Warner Bros.",
-    "Blue Sky Studios": "Fox",
-    "Jerry Bruckheimer Films": "Disney",
 }
 
-meta["studio_group"] = meta["studio_primary"].map(STUDIO_MAP).fillna("Independent")
+# Scan ALL listed companies and return the first one that maps to a known studio.
+# TMDB often lists financing/co-production companies before the actual distributor,
+# so taking the first company naively misclassifies many major-studio films.
+def find_studio_primary(companies_str):
+    try:
+        items = ast.literal_eval(companies_str)
+        companies = [d["name"] for d in items if isinstance(d, dict) and "name" in d]
+    except Exception:
+        return "Unknown"
+    for c in companies:
+        if c in STUDIO_MAP:
+            return c
+    return companies[0] if companies else "Unknown"
+
+meta["studio_primary"] = meta["production_companies"].apply(find_studio_primary)
+meta["studio_group"]   = meta["studio_primary"].map(STUDIO_MAP).fillna("Independent")
+
+# ── 5b. Distributor overrides ─────────────────────────────────────────────────
+# For films where the actual distributor is not listed in production_companies,
+# override studio_group using IMDB ID (the authoritative unique identifier).
+DISTRIBUTOR_OVERRIDE = {
+    "tt0338348": "Warner Bros.",   # The Polar Express (2004)
+    "tt0366548": "Warner Bros.",   # Happy Feet (2006)
+    "tt0116996": "Warner Bros.",   # Mars Attacks! (1996)
+    "tt0110148": "Warner Bros.",   # Interview with the Vampire (1994)
+    "tt1371111": "Warner Bros.",   # Cloud Atlas (2012)
+    "tt0112573": "Paramount",      # Braveheart (1995)
+    "tt0327437": "Disney",         # Around the World in 80 Days (2004) — Walden/Disney
+    "tt0103064": "Sony",           # Terminator 2: Judgment Day (1991) — TriStar
+    "tt0120889": "Universal",      # What Dreams May Come (1998) — PolyGram/Universal
+    "tt0125664": "Universal",      # Man on the Moon (1999)
+    "tt0146675": "Universal",      # End of Days (1999)
+    "tt4196776": "Universal",      # Jason Bourne (2016)
+    "tt0296572": "Universal",      # The Chronicles of Riddick (2004)
+    "tt0216216": "Sony",           # The 6th Day (2000) — Columbia
+    "tt0120595": "Universal",      # Babe: Pig in the City (1998)
+    "tt0080745": "Universal",      # Flash Gordon (1980)
+    "tt0277434": "Paramount",      # We Were Soldiers (2002)
+}
+
+mask = meta["imdb_id"].isin(DISTRIBUTOR_OVERRIDE) & (meta["studio_group"] == "Independent")
+meta.loc[mask, "studio_group"] = meta.loc[mask, "imdb_id"].map(DISTRIBUTOR_OVERRIDE)
+print(f"  distributor overrides applied: {mask.sum()}")
 
 # ── 5b. Studio label — subsidiary identity for meaningful sub-studios ─────────
 # Keep specific name for studios with 20+ films; collapse the rest into
@@ -146,6 +246,18 @@ STUDIO_CANONICAL = {
     "Lions Gate Films": "Lionsgate",
     "Metro-Goldwyn-Mayer": "Metro-Goldwyn-Mayer (MGM)",
     "Twentieth Century Fox Film Corporation": "20th Century Fox",
+    # DreamWorks variants → single canonical label
+    "DreamWorks SKG": "DreamWorks",
+    "DreamWorks Pictures": "DreamWorks",
+    "DreamWorks Animation": "DreamWorks",
+    "Pacific Data Images (PDI)": "DreamWorks",
+    # Weinstein variants
+    "Weinstein Company, The": "The Weinstein Company",
+    # Warner Bros. variants
+    "Warner Bros. Family Entertainment": "Warner Bros.",
+    "Warner Bros. Animation": "Warner Bros.",
+    "Warner Bros. Pictures": "Warner Bros.",
+    "New Line Productions": "New Line Cinema",
 }
 meta["studio_primary"] = meta["studio_primary"].replace(STUDIO_CANONICAL)
 
@@ -199,6 +311,12 @@ meta["decade"]  = (meta["year"] // 10 * 10).astype(str) + "s"
 kw["id"] = kw["id"].astype(str)
 meta["id"] = meta["id"].astype(str)
 meta = meta.merge(kw, on="id", how="left")
+# Deduplicate: raw TMDB metadata has some duplicate IDs; the left join can
+# multiply them. Keep the first occurrence after merging.
+before = len(meta)
+meta = meta.drop_duplicates(subset="id", keep="first").copy()
+print(f"  deduplication removed: {before - len(meta)} rows")
+
 meta["kw_names"] = meta["keywords"].apply(lambda x: parse_json_names(x, n=0))
 meta["kw_str"]   = meta["kw_names"].apply(lambda x: " | ".join(x).lower())
 
@@ -223,15 +341,50 @@ def ip_type(row):
 
 meta["ip_type"] = meta.apply(ip_type, axis=1)
 
-# ── 9. Final column selection & save ─────────────────────────────────────────
+# ── 9. Genre cleanup & multi-label indicators ────────────────────────────────
+# Drop non-film genre artifacts
+meta = meta[~meta["genre_primary"].isin(["Unknown", "TV Movie"])].copy()
+
+# Binary genre indicator columns — a film can belong to multiple genres.
+# Include all genres with 40+ multi-label occurrences across the dataset.
+GENRE_INDICATORS = {
+    "Action":          "genre_action",
+    "Adventure":       "genre_adventure",
+    "Animation":       "genre_animation",
+    "Comedy":          "genre_comedy",
+    "Crime":           "genre_crime",
+    "Drama":           "genre_drama",
+    "Family":          "genre_family",
+    "Fantasy":         "genre_fantasy",
+    "History":         "genre_history",
+    "Horror":          "genre_horror",
+    "Music":           "genre_music",
+    "Mystery":         "genre_mystery",
+    "Romance":         "genre_romance",
+    "Science Fiction": "genre_sci_fi",
+    "Thriller":        "genre_thriller",
+    "War":             "genre_war",
+    "Western":         "genre_western",
+}
+
+for genre, col in GENRE_INDICATORS.items():
+    meta[col] = meta["genres_list"].apply(lambda lst: int(genre in lst))
+
+genre_cols = list(GENRE_INDICATORS.values())
+print(f"  genre indicators added: {len(genre_cols)}")
+print("  multi-label counts:")
+for genre, col in GENRE_INDICATORS.items():
+    print(f"    {meta[col].sum():4d}  {genre}")
+
+# ── 10. Final column selection & save ─────────────────────────────────────────
 KEEP = [
     "id", "imdb_id", "title", "year", "decade", "month", "season",
     "budget_adj", "revenue_adj", "roi",
-    "budget_tier", "genre_primary", "genres_list",
+    "budget_tier", "genres_list",
     "ip_type", "studio_label", "studio_group",
     "runtime", "vote_average", "vote_count",
     "original_language", "popularity",
-]
+] + genre_cols
 
 clean = meta[KEEP].reset_index(drop=True)
 out_path = os.path.join(OUT_DIR, "movies_clean.csv")
@@ -240,8 +393,9 @@ print(f"\nSaved: {out_path}")
 print(f"Final shape: {clean.shape}")
 
 # ── 10. Quick summary ─────────────────────────────────────────────────────────
-print("\n── Genre distribution ──")
-print(clean["genre_primary"].value_counts().head(12))
+print("\n── Genre indicator counts (multi-label) ──")
+for col in genre_cols:
+    print(f"  {clean[col].sum():4d}  {col}")
 
 print("\n── Budget tier distribution ──")
 print(clean["budget_tier"].value_counts())
