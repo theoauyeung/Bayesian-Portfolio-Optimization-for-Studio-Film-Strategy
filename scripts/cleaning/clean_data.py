@@ -131,6 +131,29 @@ STUDIO_MAP = {
 
 meta["studio_group"] = meta["studio_primary"].map(STUDIO_MAP).fillna("Independent")
 
+# ── 5b. Studio label — subsidiary identity for meaningful sub-studios ─────────
+# Keep specific name for studios with 20+ films; collapse the rest into
+# "{studio_group} - Other" so the variable stays model-ready (~30 levels)
+# Normalize variant names to a canonical label before frequency thresholding
+STUDIO_CANONICAL = {
+    "Columbia Pictures Corporation": "Columbia Pictures",
+    "Lions Gate Films": "Lionsgate",
+    "Metro-Goldwyn-Mayer": "Metro-Goldwyn-Mayer (MGM)",
+    "Twentieth Century Fox Film Corporation": "20th Century Fox",
+}
+meta["studio_primary"] = meta["studio_primary"].replace(STUDIO_CANONICAL)
+
+MIN_FILMS = 20
+studio_counts = meta["studio_primary"].value_counts()
+frequent_studios = set(studio_counts[studio_counts >= MIN_FILMS].index)
+
+def studio_label(row):
+    if row["studio_primary"] in frequent_studios:
+        return row["studio_primary"]
+    return f"{row['studio_group']} - Other"
+
+meta["studio_label"] = meta.apply(studio_label, axis=1)
+
 # ── 6. Budget tier ────────────────────────────────────────────────────────────
 def budget_tier(b):
     if b < 10_000_000:
@@ -197,7 +220,7 @@ KEEP = [
     "id", "imdb_id", "title", "year", "decade", "month", "season",
     "budget_adj", "revenue_adj", "roi",
     "budget_tier", "genre_primary", "genres_list",
-    "ip_type", "studio_primary", "studio_group",
+    "ip_type", "studio_primary", "studio_label", "studio_group",
     "runtime", "vote_average", "vote_count",
     "original_language", "popularity",
 ]
