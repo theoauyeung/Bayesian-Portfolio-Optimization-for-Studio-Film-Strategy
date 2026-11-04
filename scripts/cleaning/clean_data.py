@@ -154,9 +154,11 @@ studio_counts = meta["studio_primary"].value_counts()
 frequent_studios = set(studio_counts[studio_counts >= MIN_FILMS].index)
 
 def studio_label(row):
+    # Named sub-studios with 20+ films keep their specific identity
     if row["studio_primary"] in frequent_studios:
         return row["studio_primary"]
-    return f"{row['studio_group']} - Other"
+    # Sparse studios get NaN; model falls back to studio_group
+    return None
 
 meta["studio_label"] = meta.apply(studio_label, axis=1)
 
